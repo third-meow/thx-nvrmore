@@ -1,39 +1,41 @@
 #
 # Audio test script
-# Basically coped straight from pyaudio docs: http://people.csail.mit.edu/hubert/pyaudio/#docs
+# Basically copied straight from pyaudio docs: http://people.csail.mit.edu/hubert/pyaudio/#docs
 #
 
 import pyaudio
 import wave
 import sys
-from time import sleep
 
 CHUNK = 1024
 
-if len(sys.argv) < 2:
-    print("Plays a wave file.\n\nUsage: %s filename.wav" % sys.argv[0])
-    sys.exit(-1)
+def play_wav(wav_path):
+    wf = wave.open(wav_path, 'rb')
 
-wf = wave.open(sys.argv[1], 'rb')
+    p = pyaudio.PyAudio()
 
-p = pyaudio.PyAudio()
+    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                    channels=wf.getnchannels(),
+                    rate=wf.getframerate(),
+                    output=True)
 
-stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                channels=wf.getnchannels(),
-                rate=wf.getframerate(),
-                output=True)
 
-data = wf.readframes(CHUNK)
+    data = wf.readframes(CHUNK)
+    while data != '':
+        try:
+            stream.write(data)
+            data = wf.readframes(CHUNK)
+        except KeyboardInterrupt:
+            print('\nEnter any character to play or press Ctrl+C once more to quit')
+            input()
 
-while data != '':
-    try:
-        stream.write(data)
-        data = wf.readframes(CHUNK)
-    except KeyboardInterrupt:
-        print('\nCtrl+C once more in next 3 seconds to quit')
-        sleep(3)
+    stream.stop_stream()
+    stream.close()
 
-stream.stop_stream()
-stream.close()
+    p.terminate()
 
-p.terminate()
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Plays a wave file.\n\nUsage: %s filename.wav" % sys.argv[0])
+        sys.exit(-1)
+    play_wav(sys.argv[1])
