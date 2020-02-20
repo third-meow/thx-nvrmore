@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 import os 
-import RPi.GPIO as GPIO
-import aiy.audio
-import aiy.cloudspeech
-import aiy.voicehat
+import pyaudio
+import wave
+import random
+#import RPi.GPIO as GPIO
+#import aiy.audio
+#import aiy.cloudspeech
+#import aiy.voicehat
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+#GPIO.setmode(GPIO.BCM)
+#GPIO.setwarnings(False)
+
+CHUNK = 1024
 
 def get_song_dir():
     # get path to script, split into dir names
@@ -21,8 +26,7 @@ def get_songs(path):
         Returns a list of paths to songs within a specified directory
     '''
     songs = []
-    for filename in os.listdir(path):
-        # full path to file
+    for filename in os.listdir(path): # full path to file
         filepath = os.path.join(path, filename)
         # if file is song
         if filename.endswith('.wav') or filename.endswith('.mp3'):
@@ -37,15 +41,57 @@ def get_songs(path):
 class Player:
     def __init__(self):
         self.button_pin = 23
-        GPIO.setup(self.button_pin, GPIO.IN)
-        self.light = aiy.voicehat.get_led()
+        #GPIO.setup(self.button_pin, GPIO.IN)
+        #self.light = aiy.voicehat.get_led()
 
         self.songs_dir = get_song_dir()
         self.songs = get_songs(self.songs_dir)
+        self.paused = True 
+
+    def shuffle_songs(self):
+        ''' Shuffles the song order '''
+        random.shuffle(self.songs)
+
+    def play_wav(self, wav_path):
+        ''' Plays wav file '''
+        wf = wave.open(wav_path, 'rb')
+
+        p = pyaudio.PyAudio()
+
+        stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                        channels=wf.getnchannels(),
+                        rate=wf.getframerate(),
+                        output=True)
+
+        data = wf.readframes(CHUNK)
+
+        while data != '':
+            try:
+                stream.write(data)
+                data = wf.readframes(CHUNK)
+            except KeyboardInterrupt:
+                print('\nEnter any character to play or press Ctrl+C once more to quit')
+                c = input()
+                if c == 'n' or c == 'next':
+                    return
+
+        stream.stop_stream()
+        stream.close()
+
+        p.terminate()
+
+    def play(self):
+        for song in self.songs:
+            print(f'[PLAYING] {song}')
+            self.play_wav(song)
+
+        
 
 
 def main():
     p = Player()
+    p.shuffle_songs()
+    p.play()
 
 if __name__ == '__main__':
     main()
