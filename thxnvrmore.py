@@ -82,7 +82,7 @@ class Player:
 
     def play(self):
         for song in self.songs:
-            print(f'[PLAYING] {song}')
+            print('[PLAYING] {}'.format(song))
             self.play_wav(song)
 
         
