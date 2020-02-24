@@ -3,13 +3,14 @@ import os
 import pyaudio
 import wave
 import random
-#import RPi.GPIO as GPIO
+from time import sleep
+import RPi.GPIO as GPIO
 #import aiy.audio
 #import aiy.cloudspeech
-#import aiy.voicehat
+import aiy.voicehat
 
-#GPIO.setmode(GPIO.BCM)
-#GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 
 CHUNK = 1024
 
@@ -41,8 +42,8 @@ def get_songs(path):
 class Player:
     def __init__(self):
         self.button_pin = 23
-        #GPIO.setup(self.button_pin, GPIO.IN)
-        #self.light = aiy.voicehat.get_led()
+        GPIO.setup(self.button_pin, GPIO.IN)
+        self.light = aiy.voicehat.get_led()
 
         self.songs_dir = get_song_dir()
         self.songs = get_songs(self.songs_dir)
@@ -66,14 +67,17 @@ class Player:
         data = wf.readframes(CHUNK)
 
         while data != '':
-            try:
-                stream.write(data)
-                data = wf.readframes(CHUNK)
-            except KeyboardInterrupt:
-                print('\nEnter any character to play or press Ctrl+C once more to quit')
-                c = input()
-                if c == 'n' or c == 'next':
-                    return
+            stream.write(data)
+            data = wf.readframes(CHUNK)
+            if GPIO.input(self.button_pin) == False:
+                # debounce
+                sleep(0.2)
+                print('\nHit button again to play next song')
+                while(GPIO.input(self.button_pin)):
+                    pass
+                # debounce
+                sleep(0.2)
+                return
 
         stream.stop_stream()
         stream.close()
