@@ -6,7 +6,7 @@ import random
 from time import sleep
 import RPi.GPIO as GPIO
 #import aiy.audio
-#import aiy.cloudspeech
+import aiy.cloudspeech
 import aiy.voicehat
 
 GPIO.setmode(GPIO.BCM)
@@ -45,6 +45,19 @@ class Player:
         GPIO.setup(self.button_pin, GPIO.IN)
         self.light = aiy.voicehat.get_led()
 
+        self.recog = aiy.cloudspeech.get_recognizer()
+        # expect pause command
+        self.recog.expect_phrase('pause')
+        # expect shuffle command
+        self.recog.expect_phrase('shuffle')
+        # expect next command
+        self.recog.expect_phrase('next')
+
+        # expect volume commands
+        for i in range(0, 101):
+            self.recog.expect_phrase('volume {} percent'.format(i))
+
+
         self.songs_dir = get_song_dir()
         self.songs = get_songs(self.songs_dir)
         self.paused = True 
@@ -72,12 +85,32 @@ class Player:
             if GPIO.input(self.button_pin) == False:
                 # debounce
                 sleep(0.2)
-                print('\nHit button again to play next song')
-                while(GPIO.input(self.button_pin)):
-                    pass
+                print('\n[BUTTON PRESSED] - Music paused')
+
+                voice_cmd = self.recog.recognize()
+
+                if voice_cmd == 'pause':
+                    while GPIO.input(self.button_pin) == True:
+                        pass
+
+                elif voice_cmd == 'next':
+                    sleep(0.2)
+                    return
+
+                elif voice_cmd.startswith('volume'):
+                    print('[VOLUME CHANGE]')
+
+                elif voice_cmd == 'shuffle':
+                    self.shuffle_songs()
+                    sleep(0.2)
+                    return
+
+                else:
+                    print('[VOICE COMMAND NOT RECOGNIZED] - {}'.format(voice_cmd))
+
+
                 # debounce
                 sleep(0.2)
-                return
 
         stream.stop_stream()
         stream.close()
