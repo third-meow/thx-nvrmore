@@ -3,10 +3,10 @@ import os
 import pyaudio
 import wave
 import random
+import subprocess
 from time import sleep
 import RPi.GPIO as GPIO
 #import aiy.audio
-import aiy.cloudspeech
 import aiy.voicehat
 
 GPIO.setmode(GPIO.BCM)
@@ -45,18 +45,7 @@ class Player:
         GPIO.setup(self.button_pin, GPIO.IN)
         self.light = aiy.voicehat.get_led()
 
-        self.recog = aiy.cloudspeech.get_recognizer()
-        # expect pause command
-        self.recog.expect_phrase('pause')
-        # expect shuffle command
-        self.recog.expect_phrase('shuffle')
-        # expect next command
-        self.recog.expect_phrase('next')
-
-        # expect volume commands
-        for i in range(0, 101):
-            self.recog.expect_phrase('volume {} percent'.format(i))
-
+        self.c_vol = 25
 
         self.songs_dir = get_song_dir()
         self.songs = get_songs(self.songs_dir)
@@ -65,6 +54,17 @@ class Player:
     def shuffle_songs(self):
         ''' Shuffles the song order '''
         random.shuffle(self.songs)
+
+    def cycle_volume(self):
+        self.c_vol -= 5
+        if self.c_vol == 0:
+            self.c_vol = 25
+
+
+
+        DEVNULL = open(os.devnull, 'w')
+        subprocess.Popen(['amixer', 'sset', 'Master', '{}%'.format(self.c_vol)], stdout=DEVNULL)
+
 
     def play_wav(self, wav_path):
         ''' Plays wav file '''
@@ -83,34 +83,27 @@ class Player:
             stream.write(data)
             data = wf.readframes(CHUNK)
             if GPIO.input(self.button_pin) == False:
-                # debounce
-                sleep(0.2)
-                print('\n[BUTTON PRESSED] - Music paused')
+                count = 0
+                while GPIO.input(self.button_pin) == False:
+                    count += 1
+                    sleep(0.001)
 
-                voice_cmd = self.recog.recognize()
-
-                if voice_cmd == 'pause':
-                    while GPIO.input(self.button_pin) == True:
+                if count >= 400 and count < 1200:
+                    print('\n[BUTTON LONG PRESS] - Changing to next track')
+                    return
+                elif count >= 1200 and count < 3000:
+                    print('\n[BUTTON VERY LONG PRESS] - Changing Volume')
+                    self.cycle_volume()
+                elif count >= 3000:
+                    # shutdown code goes here
+                    pass
+                else:
+                    print('\n[BUTTON SHORT PRESS] - Pausing music')
+                    sleep(0.3) # debounce
+                    while GPIO.input(self.button_pin):
                         pass
 
-                elif voice_cmd == 'next':
-                    sleep(0.2)
-                    return
-
-                elif voice_cmd.startswith('volume'):
-                    print('[VOLUME CHANGE]')
-
-                elif voice_cmd == 'shuffle':
-                    self.shuffle_songs()
-                    sleep(0.2)
-                    return
-
-                else:
-                    print('[VOICE COMMAND NOT RECOGNIZED] - {}'.format(voice_cmd))
-
-
-                # debounce
-                sleep(0.2)
+                sleep(0.2) # debounce
 
         stream.stop_stream()
         stream.close()
