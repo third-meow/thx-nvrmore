@@ -13,6 +13,8 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
 CHUNK = 1024
+MAX_VOL = 20
+
 
 def get_song_dir():
     # get path to script, split into dir names
@@ -37,7 +39,7 @@ def get_songs(path):
             # recurse
             songs += get_songs(filepath)
 
-    return songs
+    return sorted(songs)
 
 class Player:
     def __init__(self):
@@ -45,22 +47,25 @@ class Player:
         GPIO.setup(self.button_pin, GPIO.IN)
         self.light = aiy.voicehat.get_led()
 
-        self.c_vol = 25
+        self.c_vol = MAX_VOL
 
         self.songs_dir = get_song_dir()
         self.songs = get_songs(self.songs_dir)
+        self.songs_orginal_order = self.songs
+        self.shuffled = False
         self.paused = True 
 
     def shuffle_songs(self):
-        ''' Shuffles the song order '''
-        random.shuffle(self.songs)
+        ''' Shuffles the song order OR if already shuffled, unshuffles them '''
+        if self.shuffled == False:
+            random.shuffle(self.songs)
+        else:
+            self.songs = self.songs_orginal_order
 
     def cycle_volume(self):
         self.c_vol -= 5
         if self.c_vol == 0:
-            self.c_vol = 25
-
-
+            self.c_vol = MAX_VOL
 
         DEVNULL = open(os.devnull, 'w')
         subprocess.Popen(['amixer', 'sset', 'Master', '{}%'.format(self.c_vol)], stdout=DEVNULL)
@@ -88,32 +93,40 @@ class Player:
                     count += 1
                     sleep(0.001)
 
-                if count >= 400 and count < 1200:
-                    print('\n[BUTTON LONG PRESS] - Changing to next track')
-                    return
-                elif count >= 1200 and count < 3000:
-                    print('\n[BUTTON VERY LONG PRESS] - Changing Volume')
+                if count > 500 and count < 2000:
+                    print('\n[BUTTON LONG PRESS] - Changing Volume')
                     self.cycle_volume()
-                elif count >= 3000:
-                    # shutdown code goes here
-                    pass
+                elif count >= 2000:
+                    print('\n[BUTTON VERY LONG PRESS] - Shuffle/Unshuffle')
+                    self.shuffle_songs()
+                    return 'SHUFFLE'
                 else:
-                    print('\n[BUTTON SHORT PRESS] - Pausing music')
-                    sleep(0.3) # debounce
-                    while GPIO.input(self.button_pin):
-                        pass
+                    stream.stop_stream()
+                    stream.close()
+                    return 'PAUSE'
 
                 sleep(0.2) # debounce
 
         stream.stop_stream()
         stream.close()
+        return 'NEXT_TRACK'
 
         p.terminate()
 
     def play(self):
         for song in self.songs:
             print('[PLAYING] {}'.format(song))
-            self.play_wav(song)
+            return_code = self.play_wav(song)
+            if return_code == 'PAUSE':
+                # wait for "play" signal
+                while GPIO.input(self.button_pin) == True:
+                    pass
+            elif return_code == 'NEXT_TRACK':
+                continue
+            elif return_code == 'SHUFFLE':
+                return
+
+
 
         
 
@@ -121,7 +134,8 @@ class Player:
 def main():
     p = Player()
     p.shuffle_songs()
-    p.play()
+    while True:
+        p.play()
 
 if __name__ == '__main__':
     main()
